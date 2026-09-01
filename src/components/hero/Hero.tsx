@@ -59,7 +59,7 @@ export function Hero() {
         className="max-w-site-desktop mx-auto px-5 md:px-8 w-full z-10"
       >
         <motion.div
-          className="flex flex-col lg:grid lg:grid-cols-12 lg:items-center gap-12 lg:gap-8"
+          className="flex flex-col lg:grid lg:grid-cols-12 lg:items-start gap-12 lg:gap-8"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
@@ -140,7 +140,12 @@ export function Hero() {
 
           {/* Visual Architecture Side (5 columns) */}
           <motion.div
-            className="lg:col-span-5 flex flex-col justify-center lg:flex w-full mt-12 lg:mt-0"
+            /* The grid is top-aligned (lg:items-start), so the portrait is
+               pushed down by exactly the height of the "AI / ML ENGINEERING"
+               eyebrow row above the heading - avatar h-8 (2rem) + mb-6
+               (1.5rem) = 3.5rem = mt-14. That puts the portrait's top edge on
+               the same line as the top of "I BUILD". */
+            className="lg:col-span-5 flex flex-col w-full mt-12 lg:mt-14"
           >
             <motion.div variants={itemVariants} className="w-full max-w-[400px] mx-auto lg:max-w-none">
               <InteractiveFace />

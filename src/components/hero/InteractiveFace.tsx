@@ -6,97 +6,118 @@ import Image from 'next/image';
 /* ===========================================================================
  * LIQUID CHROME LENS
  *
- * The hero portrait is the ORIGINAL PHOTOGRAPH, painted immediately as a
- * plain <img>. A WebGL canvas layers on top once it is ready and renders the
- * same photograph plus a small, soft-edged liquid-chrome region that follows
- * the cursor. Nothing outside that region is altered.
+ * The hero shows the ORIGINAL photograph. A small, soft-edged region that
+ * follows the cursor becomes polished liquid chrome. Nothing outside that
+ * region is altered, and with no pointer the portrait is untouched and static.
  *
- * Loading order is deliberate:
- *   1. container reserves its exact aspect ratio (no CLS)
- *   2. the <img> paints the portrait as soon as it downloads
+ * The 3D illusion comes from REFLECTION, not geometry: a baked low-frequency
+ * facial height map supplies smooth normals, the reflected view vector samples
+ * an analytic studio environment, and specular + Fresnel sit on top. There is
+ * no mesh, no wireframe and no vertices.
+ *
+ * Loading order:
+ *   1. container reserves its aspect ratio (no CLS)
+ *   2. a server-rendered <img> paints the portrait immediately
  *   3. WebGL initialises asynchronously behind it
  *   4. the canvas cross-fades in, pixel-matched to the <img>
- * The user never sees a blank or black rectangle, and if WebGL fails or is
- * unavailable the <img> simply remains - it IS the fallback.
- *
- * Raw WebGL 1.0, one fullscreen quad, one shader, no dependencies.
+ * If WebGL is unavailable or a shader fails, the <img> simply remains - it IS
+ * the fallback. The canvas is transparent outside the subject, so the panel's
+ * themed CSS background shows through in both light and dark themes.
  * ==========================================================================*/
 
 /**
  * Alpha-baked, downscaled derivative of public/wmremove-transformed.png.
- *
- * The original declares colourType 6 (RGBA) but every pixel is alpha 255 - its
- * apparent transparency is a light-grey CHECKERBOARD painted into the RGB
- * channels by the watermark-removal tool. That checkerboard was flood-filled
- * from the border into a genuine alpha channel and the result written as WebP:
- * 7.7 MB -> 260 KB, 1152x1717, facial detail and blue rim lighting preserved.
- *
- * Because alpha is now real, there is NO runtime image preprocessing at all.
+ * That original declares colourType 6 but is fully opaque - its apparent
+ * transparency is a checkerboard painted into RGB by a watermark tool. The
+ * checkerboard was flood-filled into a real alpha channel offline:
+ * 7.7 MB -> 260 KB. Because alpha is real there is NO runtime preprocessing.
  */
 const PORTRAIT_SRC = '/portrait-hero.webp';
 const PORTRAIT_W = 1152;
 const PORTRAIT_H = 1717;
 
+/**
+ * Baked 192x286 facial height map (~40 KB), heavily low-passed offline.
+ * Deriving normals from the photograph at runtime turns beard and hair into
+ * "metal scratches"; a small blurred height field bilinearly filtered is
+ * inherently smooth and encodes only broad structure - forehead, brow ridge,
+ * eye sockets, nose bridge and tip, cheeks, lips, chin, jaw.
+ * Loaded async: it gates only the chrome, never the portrait.
+ */
+const HEIGHT_SRC = '/portrait-height.png';
+const HEIGHT_W = 192;
+const HEIGHT_H = 286;
+
 /* ---------------------------------------------------------------------------
  * TUNING
  * -------------------------------------------------------------------------*/
 const TUNING = {
-  /** Base photograph level. 1.0 = the original image, untouched. */
-  BASE_PHOTO: 1.0,
-
-  /** Lens radius, height-normalised. Small on purpose: a local patch of the
-   *  face, never the whole head. */
-  CURSOR_RADIUS: 0.16,
-  /** Inner edge as a fraction of the radius. Lower = softer feather, so the
-   *  boundary never reads as an obvious circle. */
-  CURSOR_FEATHER: 0.12,
+  /** Lens radius, height-normalised. Small: a local patch, never the head. */
+  CURSOR_RADIUS: 0.115,
+  /** Inner edge as a fraction of the radius. Low = wide feather, so the
+   *  boundary never reads as a circular sticker. */
+  CURSOR_FEATHER: 0.10,
   /** Pointer easing per frame (1.0 = instant). High: tracking must not lag. */
   CURSOR_SMOOTHING: 0.55,
 
-  /** ATTACK: chrome appears essentially instantly under the cursor. */
-  CHROME_ATTACK: 0.5,
-  /** RELEASE: once the cursor moves on, the metal lingers and reconstructs
-   *  back into the photograph over this long. */
-  CHROME_RELEASE_MS: 1100,
-  /** Cursor travel between trail samples. */
-  TRAIL_SPACING: 0.03,
+  /** Chrome appears essentially instantly under the pointer. */
+  CHROME_ATTACK: 0.45,
+  /** On leave the metal reconstructs back into the photo over this long.
+   *  Short enough that it never reads as a smear or a trail. */
+  CHROME_RELEASE_MS: 620,
 
-  CHROME_STRENGTH: 1.0,
-  CHROME_REFLECTION_STRENGTH: 1.45,
-  CHROME_SPECULAR_STRENGTH: 0.6,
-  /** Refraction-like warp inside the lens. Tiny: the photograph must stay
-   *  geometrically stable. */
-  CHROME_DISTORTION: 0.007,
-  /** How hard image-derived normals bend the reflection. Large on purpose:
-   *  the luminance gradient across a few texels is only ~0.02, and this is
-   *  what makes the reflection vector sweep the environment instead of
-   *  sitting at R.y == 0 and returning a black void. */
-  CHROME_NORMAL_STRENGTH: 9.0,
-  CHROME_SPEC_POWER: 32.0,
-  /** How much underlying photo luminance survives in the metal, so the
-   *  feature under the lens stays recognisable. */
-  CHROME_IMAGE_READTHROUGH: 0.75,
-  /** Sobel sample radius, in source texels. Wide on purpose: a small radius
-   *  picks up eyebrow and lash detail, which swings the normals violently and
-   *  makes the metal read as scratchy filaments instead of a smooth surface.
-   *  Three octaves are blended, weighted toward the widest. */
-  SOBEL_RADIUS: 14.0,
+  /** Surface shape. Normals come from the baked height map only. */
+  NORMAL_STRENGTH: 13.0,
+  /** Height-map gradient sample distance, in height-map texels. */
+  NORMAL_SAMPLE: 1.25,
 
-  /** Reconstruction dissolve. Perturbation scales with (1 - raw) so the lens
-   *  core stays a solid smooth surface and only the retreating edge breaks up. */
-  DISSOLVE_SCALE: 20.0,
-  DISSOLVE_AMOUNT: 0.85,
-  DISSOLVE_EDGE: 0.26,
-  /** Molten rim on the reconstruction boundary. An accent, not a glow. */
-  RECONSTRUCT_RIM: 0.32,
+  /** Material. These are what make the metal bright; they are NOT scaled by
+   *  the photograph. */
+  REFLECTION_STRENGTH: 1.0,
+  SPEC_SHARP_POWER: 90.0,
+  SPEC_SHARP_WEIGHT: 0.85,
+  SPEC_BROAD_POWER: 11.0,
+  SPEC_BROAD_WEIGHT: 0.38,
+  FRESNEL_STRENGTH: 0.55,
+
+  /** Identity read-through. Deliberately small: the photo modulates the metal
+   *  by only a few percent, so chrome stays equally bright over hair, beard,
+   *  skin and hoodie. (The previous 0.75 made dark regions go black.) */
+  IMAGE_READTHROUGH: 0.3,
+
+  /** Refraction-like warp. Tiny: the face must not move. */
+  DISTORTION: 0.006,
+
+  /** Organic edge modulation so the lens blends like liquid, not a spotlight. */
+  EDGE_NOISE_SCALE: 14.0,
+  EDGE_NOISE_AMOUNT: 0.4,
+  EDGE_SOFTNESS: 0.3,
 };
 
-/** Cover-fit: fraction of the excess height taken off the TOP. Must equal the
- *  <img> objectPosition below, or the canvas would jump when it fades in. */
+/** Studio environments sampled by the reflection vector, per theme. */
+const ENV = {
+  light: {
+    low: [0.30, 0.34, 0.40],
+    high: [0.84, 0.89, 0.97],
+    band: [1.0, 1.0, 1.0],
+    bounce: [0.34, 0.46, 0.70],
+    specTint: [0.96, 0.98, 1.0],
+    fresnelTint: [0.55, 0.68, 0.92],
+  },
+  dark: {
+    low: [0.07, 0.085, 0.115],
+    high: [0.36, 0.42, 0.54],
+    band: [0.95, 0.97, 1.0],
+    bounce: [0.17, 0.27, 0.48],
+    specTint: [0.90, 0.94, 1.0],
+    fresnelTint: [0.42, 0.57, 0.88],
+  },
+} as const;
+
+/** Cover-fit: fraction of excess height taken off the TOP. Must match the
+ *  <img> objectPosition, or the canvas would jump when it fades in. */
 const CROP_TOP_BIAS = 0.2;
 const CONTAINER_ASPECT = 3 / 4;
-/** Trail length. Each point costs one fragment uniform vector. */
-const TRAIL_N = 16;
 const MAX_DPR = 2;
 
 const f = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
@@ -120,55 +141,43 @@ const FS = `
   varying vec2 v_uv;
 
   uniform sampler2D u_photo;
+  uniform sampler2D u_height;
   uniform vec2 u_uvScale;
   uniform vec2 u_uvOffset;
-  uniform vec2 u_texel;
-  /** xy = cursor in container UV, z = strength (1 = fresh, 0 = reconstructed). */
-  uniform vec3 u_trail[${TRAIL_N}];
+  uniform vec2 u_hTexel;
+  uniform vec2 u_cursor;
+  uniform float u_amount;
   uniform float u_aspect;
+  uniform float u_hasHeight;
+
+  uniform vec3 u_envLow;
+  uniform vec3 u_envHigh;
+  uniform vec3 u_envBand;
+  uniform vec3 u_envBounce;
+  uniform vec3 u_specTint;
+  uniform vec3 u_fresnelTint;
 
   float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-  float L(vec2 uv) { return lum(texture2D(u_photo, uv).rgb); }
+  float hgt(vec2 uv) { return texture2D(u_height, uv).r; }
 
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
-
   float vnoise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 fr = fract(p);
+    vec2 i = floor(p); vec2 fr = fract(p);
     vec2 u = fr * fr * (3.0 - 2.0 * fr);
-    return mix(
-      mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
-      mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
-      u.y
-    );
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+               mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
   }
 
-  /* Sobel over photo luminance. v grows downward, so screen-up is -r.y. */
-  vec2 lumaGrad(vec2 uv, vec2 r) {
-    float tl = L(uv + vec2(-r.x, -r.y));
-    float tt = L(uv + vec2( 0.0, -r.y));
-    float tr = L(uv + vec2( r.x, -r.y));
-    float ll = L(uv + vec2(-r.x,  0.0));
-    float rr = L(uv + vec2( r.x,  0.0));
-    float bl = L(uv + vec2(-r.x,  r.y));
-    float bb = L(uv + vec2( 0.0,  r.y));
-    float br = L(uv + vec2( r.x,  r.y));
-    float gx = (tr + 2.0 * rr + br) - (tl + 2.0 * ll + bl);
-    float gy = (tl + 2.0 * tt + tr) - (bl + 2.0 * bb + br);
-    return vec2(gx, gy) * 0.125;
-  }
-
-  /* Analytic dark studio environment. Deep near-black almost everywhere with
-     one NARROW bright streak: wide dark areas between sharp highlights are
-     what make metal read as polished chrome rather than flat grey. */
+  /* Analytic studio environment. Broad coherent bands - a bright overhead
+     strip, a cool bounce below, dark steel between - are what read as
+     polished metal when swept across a curved normal field. Colours are
+     supplied per theme, so light and dark are not hardcoded. */
   vec3 envSample(vec3 r) {
     float y = clamp(r.y, -1.0, 1.0);
-    vec3 c = mix(vec3(0.004, 0.005, 0.010),
-                 vec3(0.028, 0.038, 0.062),
-                 smoothstep(-0.7, 0.8, y));
-    c += vec3(0.70, 0.78, 0.95) * exp(-pow((y - 0.26) / 0.20, 2.0));
-    c += vec3(0.13, 0.17, 0.27) * exp(-pow((y + 0.38) / 0.24, 2.0));
-    c *= 0.82 + 0.18 * cos(r.x * 5.0);
+    vec3 c = mix(u_envLow, u_envHigh, smoothstep(-0.85, 0.85, y));
+    c += u_envBand   * exp(-pow((y - 0.36) / 0.19, 2.0));
+    c += u_envBounce * exp(-pow((y + 0.36) / 0.28, 2.0));
+    c *= 0.92 + 0.08 * cos(r.x * 4.0 + 1.2);
     return c;
   }
 
@@ -177,90 +186,69 @@ const FS = `
     vec4 tex = texture2D(u_photo, puv);
     float subject = tex.a;
 
-    // The ORIGINAL photograph, composited over the near-black panel.
-    vec3 base = tex.rgb * subject * ${f(TUNING.BASE_PHOTO)};
+    // Soft, aspect-corrected radial lens with organic edge modulation, so the
+    // boundary blends like liquid rather than a CSS spotlight.
+    vec2 d = v_uv - u_cursor;
+    d.x *= u_aspect;
+    float dist = length(d);
+    float wob = (vnoise(v_uv * ${f(TUNING.EDGE_NOISE_SCALE)}) - 0.5)
+              * ${f(TUNING.EDGE_NOISE_AMOUNT)};
+    float rIn = ${f(TUNING.CURSOR_RADIUS)} * ${f(TUNING.CURSOR_FEATHER)};
+    float rOut = ${f(TUNING.CURSOR_RADIUS)} * (1.0 + wob * 0.35);
+    float raw = (1.0 - smoothstep(rIn, rOut, dist)) * u_amount;
 
-    // Localized lens. Each trail sample contributes a soft, aspect-corrected
-    // radial falloff and the strongest wins. Fresh samples sit at full
-    // strength (instant attack); older ones fade over CHROME_RELEASE_MS, so
-    // the metal lingers behind the cursor and reconstructs into the photo.
-    float raw = 0.0;
-    for (int i = 0; i < ${TRAIL_N}; i++) {
-      if (u_trail[i].z > 0.0) {
-        vec2 d = v_uv - u_trail[i].xy;
-        d.x *= u_aspect;
-        float g = 1.0 - smoothstep(
-          ${f(TUNING.CURSOR_RADIUS)} * ${f(TUNING.CURSOR_FEATHER)},
-          ${f(TUNING.CURSOR_RADIUS)},
-          length(d)
-        );
-        raw = max(raw, g * u_trail[i].z);
-      }
-    }
+    // Break the retreating edge up so it reads as reconstruction, never a
+    // hard fade. Subtracting guarantees mask == 0 wherever raw == 0, so
+    // nothing can leak outside the lens.
+    float nz = vnoise(v_uv * ${f(TUNING.EDGE_NOISE_SCALE)} * 1.7);
+    float perturbed = raw - nz * 0.45 * (1.0 - raw);
+    float mask = smoothstep(0.0, ${f(TUNING.EDGE_SOFTNESS)}, perturbed) * subject;
 
-    // Reconstruction: decaying regions break up along a noise field instead of
-    // fading flatly. The perturbation is weighted by (1.0 - raw) so the lens
-    // core stays solid, and SUBTRACTING (rather than thresholding) guarantees
-    // mask == 0 wherever raw == 0, so nothing can leak outside the lens.
-    float nz = vnoise(v_uv * ${f(TUNING.DISSOLVE_SCALE)}) * 0.7
-             + vnoise(v_uv * ${f(TUNING.DISSOLVE_SCALE)} * 2.7) * 0.3;
-    float perturbed = raw - nz * ${f(TUNING.DISSOLVE_AMOUNT)} * (1.0 - raw);
-    float mask = smoothstep(0.0, ${f(TUNING.DISSOLVE_EDGE)}, perturbed);
-    mask *= subject * ${f(TUNING.CHROME_STRENGTH)};
-
-    // Everything outside the lens is the untouched photograph. The early out
-    // also keeps the 16 Sobel taps off the vast majority of pixels.
-    if (mask < 0.002) {
-      gl_FragColor = vec4(base, 1.0);
+    // Outside the lens: the untouched photograph, premultiplied.
+    if (mask < 0.002 || u_hasHeight < 0.5) {
+      gl_FragColor = vec4(tex.rgb * subject, subject);
       return;
     }
 
-    // Three octaves weighted toward the widest, so the metal follows broad
-    // facial relief (brow ridge, nose, cheek) and not individual hairs.
-    vec2 r1 = u_texel * ${f(TUNING.SOBEL_RADIUS)};
-    vec2 grad = lumaGrad(puv, r1)       * 0.25
-              + lumaGrad(puv, r1 * 2.0) * 0.35
-              + lumaGrad(puv, r1 * 4.0) * 0.40;
-
+    // --- smooth facial normals from the baked height map --------------------
+    vec2 e = u_hTexel * ${f(TUNING.NORMAL_SAMPLE)};
+    float hx = hgt(puv + vec2(e.x, 0.0)) - hgt(puv - vec2(e.x, 0.0));
+    float hy = hgt(puv + vec2(0.0, e.y)) - hgt(puv - vec2(0.0, e.y));
     vec3 N = normalize(vec3(
-      -grad.x * ${f(TUNING.CHROME_NORMAL_STRENGTH)} / u_aspect,
-       grad.y * ${f(TUNING.CHROME_NORMAL_STRENGTH)},
+      -hx * ${f(TUNING.NORMAL_STRENGTH)},
+       hy * ${f(TUNING.NORMAL_STRENGTH)},
        1.0
     ));
 
-    // Very subtle refraction: the lens bends what it sits on, it does not
-    // move the face.
-    vec2 warp = N.xy * ${f(TUNING.CHROME_DISTORTION)} * mask;
-    float under = lum(texture2D(u_photo, puv + warp).rgb);
-
     vec3 V = vec3(0.0, 0.0, 1.0);
     vec3 R = reflect(-V, N);
-    vec3 env = envSample(R);
 
-    vec3 Ldir = normalize(vec3(0.35, 0.45, 0.90));
-    vec3 H = normalize(Ldir + V);
-    float spec = pow(max(dot(N, H), 0.0), ${f(TUNING.CHROME_SPEC_POWER)});
-    float fres = pow(1.0 - max(dot(N, V), 0.0), 5.0);
+    // --- material ----------------------------------------------------------
+    vec3 env = envSample(R) * ${f(TUNING.REFLECTION_STRENGTH)};
 
-    vec3 chrome = vec3(0.014, 0.017, 0.024)
-                + env * ${f(TUNING.CHROME_REFLECTION_STRENGTH)}
-                + vec3(0.88, 0.92, 1.00) * spec * ${f(TUNING.CHROME_SPECULAR_STRENGTH)}
-                + vec3(0.20, 0.27, 0.42) * fres * 0.40;
+    vec3 L1 = normalize(vec3(-0.34, 0.58, 0.74));
+    vec3 L2 = normalize(vec3( 0.46, 0.22, 0.86));
+    float sharp = pow(max(dot(N, normalize(L1 + V)), 0.0), ${f(TUNING.SPEC_SHARP_POWER)});
+    float broad = pow(max(dot(N, normalize(L2 + V)), 0.0), ${f(TUNING.SPEC_BROAD_POWER)});
+    float fres  = pow(1.0 - max(dot(N, V), 0.0), 5.0);
 
-    // Let the photograph read through the metal so the feature under the lens
-    // stays identifiable, while keeping the material dark.
-    chrome *= (1.0 - ${f(TUNING.CHROME_IMAGE_READTHROUGH)})
-            + ${f(TUNING.CHROME_IMAGE_READTHROUGH)} * (0.55 + 0.75 * under);
+    vec3 chrome = env
+                + vec3(1.0) * sharp * ${f(TUNING.SPEC_SHARP_WEIGHT)}
+                + u_specTint * broad * ${f(TUNING.SPEC_BROAD_WEIGHT)}
+                + u_fresnelTint * fres * ${f(TUNING.FRESNEL_STRENGTH)};
 
-    // Molten rim along the reconstruction boundary only. Scaled by (1 - raw)
-    // so the fresh lens under the cursor stays clean and the rim appears only
-    // where the metal is actually retreating.
-    float rim = mask * (1.0 - mask) * 4.0 * (1.0 - raw);
-    chrome += vec3(0.40, 0.50, 0.72) * rim * ${f(TUNING.RECONSTRUCT_RIM)};
+    // Identity read-through, deliberately weak and centred on 1.0 so the
+    // photograph nudges the metal without ever determining whether it is
+    // bright enough to see.
+    vec2 warp = N.xy * ${f(TUNING.DISTORTION)} * mask;
+    float under = lum(texture2D(u_photo, puv + warp).rgb);
+    float shade = 0.80 + 0.40 * under;
+    chrome *= mix(1.0, shade, ${f(TUNING.IMAGE_READTHROUGH)});
 
     chrome = clamp(chrome, 0.0, 1.0);
 
-    gl_FragColor = vec4(mix(base, chrome, mask), 1.0);
+    vec3 outc = mix(tex.rgb, chrome, mask);
+    gl_FragColor = vec4(outc * subject, subject);
   }
 `;
 
@@ -273,16 +261,14 @@ const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi 
 export function InteractiveFace() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  /** Flips once the canvas has drawn a frame, so it can cross-fade in over
-   *  the <img>. One state update for the whole lifetime of the component. */
+  /** Flips once the canvas holds a real frame. One state update, ever. */
   const [ready, setReady] = useState(false);
 
   // All pointer state lives in refs: moving the mouse never re-renders React.
   const target = useRef<[number, number]>([0.5, 0.45]);
   const smooth = useRef<[number, number]>([0.5, 0.45]);
   const active = useRef(false);
-  const attack = useRef(0);
-  const trail = useRef<{ x: number; y: number; t: number }[]>([]);
+  const amount = useRef(0);
 
   useEffect(() => {
     // Every browser API below is reached only here, after client mount.
@@ -293,7 +279,8 @@ export function InteractiveFace() {
     let glCtx: WebGLRenderingContext | null = null;
     try {
       glCtx = canvas.getContext('webgl', {
-        alpha: false,
+        alpha: true,
+        premultipliedAlpha: true,
         antialias: false,
         depth: false,
         stencil: false,
@@ -302,8 +289,7 @@ export function InteractiveFace() {
     } catch {
       glCtx = null;
     }
-    // No WebGL: the <img> underneath simply stays visible.
-    if (!glCtx) return;
+    if (!glCtx) return; // <img> underneath stays visible
     const gl: WebGLRenderingContext = glCtx;
 
     const reduceMotion =
@@ -341,10 +327,9 @@ export function InteractiveFace() {
         }
       }
     }
-    // Shader failure must never blank the hero: leave the <img> showing.
     if (!program) {
       shaders.forEach((s) => gl.deleteShader(s));
-      return;
+      return; // hero keeps showing the photograph
     }
     const prog: WebGLProgram = program;
 
@@ -356,41 +341,59 @@ export function InteractiveFace() {
       gl.STATIC_DRAW,
     );
 
-    const aPos = gl.getAttribLocation(prog, 'a_pos');
-    const aUv = gl.getAttribLocation(prog, 'a_uv');
-    const uPhoto = gl.getUniformLocation(prog, 'u_photo');
-    const uUvScale = gl.getUniformLocation(prog, 'u_uvScale');
-    const uUvOffset = gl.getUniformLocation(prog, 'u_uvOffset');
-    const uTexel = gl.getUniformLocation(prog, 'u_texel');
-    const uTrail = gl.getUniformLocation(prog, 'u_trail');
-    const uAspect = gl.getUniformLocation(prog, 'u_aspect');
-    const trailData = new Float32Array(TRAIL_N * 3);
+    const loc = {
+      pos: gl.getAttribLocation(prog, 'a_pos'),
+      uv: gl.getAttribLocation(prog, 'a_uv'),
+      photo: gl.getUniformLocation(prog, 'u_photo'),
+      height: gl.getUniformLocation(prog, 'u_height'),
+      uvScale: gl.getUniformLocation(prog, 'u_uvScale'),
+      uvOffset: gl.getUniformLocation(prog, 'u_uvOffset'),
+      hTexel: gl.getUniformLocation(prog, 'u_hTexel'),
+      cursor: gl.getUniformLocation(prog, 'u_cursor'),
+      amount: gl.getUniformLocation(prog, 'u_amount'),
+      aspect: gl.getUniformLocation(prog, 'u_aspect'),
+      hasHeight: gl.getUniformLocation(prog, 'u_hasHeight'),
+      envLow: gl.getUniformLocation(prog, 'u_envLow'),
+      envHigh: gl.getUniformLocation(prog, 'u_envHigh'),
+      envBand: gl.getUniformLocation(prog, 'u_envBand'),
+      envBounce: gl.getUniformLocation(prog, 'u_envBounce'),
+      specTint: gl.getUniformLocation(prog, 'u_specTint'),
+      fresnelTint: gl.getUniformLocation(prog, 'u_fresnelTint'),
+    };
 
-    const photoTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, photoTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
-      new Uint8Array([0, 0, 0, 0]));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    const makeTex = () => {
+      const t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+        new Uint8Array([0, 0, 0, 0]));
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      return t;
+    };
+    const photoTex = makeTex();
+    const heightTex = makeTex();
 
     let uvScale: [number, number] = [1, 1];
     let uvOffset: [number, number] = [0, 0];
-    let texel: [number, number] = [1 / PORTRAIT_W, 1 / PORTRAIT_H];
-    let loaded = false;
+    let photoLoaded = false;
+    let heightLoaded = false;
     let revealed = false;
     let aspect = CONTAINER_ASPECT;
+    let isDark = document.documentElement.classList.contains('dark');
     let disposed = false;
     let onScreen = true;
     let running = false;
     let raf = 0;
+    let lastT = 0;
 
     const requestRender = () => {
-      // document.hidden is checked here, not only in the visibilitychange
+      // document.hidden checked here, not only in the visibilitychange
       // handler, so a pointer event cannot restart the loop in a hidden tab.
       if (disposed || !onScreen || document.hidden || running) return;
       running = true;
+      lastT = 0;
       raf = requestAnimationFrame(frame);
     };
     const stop = () => {
@@ -414,13 +417,12 @@ export function InteractiveFace() {
       requestRender();
     };
 
-    // Same URL as the <img>, so this is served straight from cache and adds
-    // no extra network request.
-    const img = new window.Image();
-    img.decoding = 'async';
-    img.onload = () => {
+    // Same URL as the <img>: served from cache, no extra request.
+    const photo = new window.Image();
+    photo.decoding = 'async';
+    photo.onload = () => {
       if (disposed) return;
-      const srcAspect = img.naturalWidth / img.naturalHeight;
+      const srcAspect = photo.naturalWidth / photo.naturalHeight;
       if (srcAspect < CONTAINER_ASPECT) {
         const visibleV = srcAspect / CONTAINER_ASPECT;
         uvScale = [1, visibleV];
@@ -430,91 +432,92 @@ export function InteractiveFace() {
         uvScale = [visibleU, 1];
         uvOffset = [(1 - visibleU) * 0.5, 0];
       }
-      texel = [1 / img.naturalWidth, 1 / img.naturalHeight];
-
       gl.bindTexture(gl.TEXTURE_2D, photoTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      loaded = true;
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, photo);
+      photoLoaded = true;
       resize();
       requestRender();
     };
-    img.src = PORTRAIT_SRC;
+    photo.src = PORTRAIT_SRC;
 
-    function frame() {
+    const height = new window.Image();
+    height.decoding = 'async';
+    height.onload = () => {
       if (disposed) return;
-      const now = performance.now();
+      gl.bindTexture(gl.TEXTURE_2D, heightTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, height);
+      heightLoaded = true;
+      requestRender();
+    };
+    height.src = HEIGHT_SRC;
+
+    function frame(now: number) {
+      if (disposed) return;
+      const dt = lastT ? Math.min(now - lastT, 100) : 16.7;
+      lastT = now;
 
       const ease = reduceMotion ? 1 : TUNING.CURSOR_SMOOTHING;
-      smooth.current[0] += (target.current[0] - smooth.current[0]) * ease;
-      smooth.current[1] += (target.current[1] - smooth.current[1]) * ease;
-
-      attack.current += ((active.current ? 1 : 0) - attack.current) *
-        (reduceMotion ? 1 : TUNING.CHROME_ATTACK);
-
-      const pts = trail.current;
-      if (active.current && pts.length) {
-        const head = pts[pts.length - 1];
-        head.x = smooth.current[0];
-        head.y = smooth.current[1];
-        head.t = now;
+      if (active.current) {
+        smooth.current[0] += (target.current[0] - smooth.current[0]) * ease;
+        smooth.current[1] += (target.current[1] - smooth.current[1]) * ease;
+        // Instant attack.
+        amount.current += (1 - amount.current) * (reduceMotion ? 1 : TUNING.CHROME_ATTACK);
+      } else {
+        // Delayed release: the lens reconstructs in place. The position is
+        // frozen, so there is never a trail or residue behind the cursor.
+        amount.current -= reduceMotion ? 1 : dt / TUNING.CHROME_RELEASE_MS;
       }
-      while (pts.length && now - pts[0].t >= TUNING.CHROME_RELEASE_MS) pts.shift();
+      amount.current = clamp(amount.current, 0, 1);
+      const eased = amount.current * amount.current * (3 - 2 * amount.current);
 
-      let decaying = false;
-      for (let i = 0; i < TRAIL_N; i++) {
-        const p = pts[pts.length - 1 - i];
-        if (p) {
-          let k = clamp(1 - (now - p.t) / TUNING.CHROME_RELEASE_MS, 0, 1);
-          k = k * k * (3 - 2 * k);
-          if (active.current && i === 0) k = attack.current;
-          else if (k > 0.001) decaying = true;
-          trailData[i * 3] = p.x;
-          trailData[i * 3 + 1] = p.y;
-          trailData[i * 3 + 2] = k;
-        } else {
-          trailData[i * 3] = -1;
-          trailData[i * 3 + 1] = -1;
-          trailData[i * 3 + 2] = 0;
-        }
-      }
-
-      gl.clearColor(0.0196, 0.0196, 0.0235, 1);
+      gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
 
-      if (loaded) {
+      if (photoLoaded) {
+        const env = isDark ? ENV.dark : ENV.light;
         gl.useProgram(prog);
         gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-        gl.enableVertexAttribArray(aPos);
-        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 16, 0);
-        gl.enableVertexAttribArray(aUv);
-        gl.vertexAttribPointer(aUv, 2, gl.FLOAT, false, 16, 8);
+        gl.enableVertexAttribArray(loc.pos);
+        gl.vertexAttribPointer(loc.pos, 2, gl.FLOAT, false, 16, 0);
+        gl.enableVertexAttribArray(loc.uv);
+        gl.vertexAttribPointer(loc.uv, 2, gl.FLOAT, false, 16, 8);
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, photoTex);
-        gl.uniform1i(uPhoto, 0);
-        gl.uniform2f(uUvScale, uvScale[0], uvScale[1]);
-        gl.uniform2f(uUvOffset, uvOffset[0], uvOffset[1]);
-        gl.uniform2f(uTexel, texel[0], texel[1]);
-        gl.uniform3fv(uTrail, trailData);
-        gl.uniform1f(uAspect, aspect);
+        gl.uniform1i(loc.photo, 0);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, heightTex);
+        gl.uniform1i(loc.height, 1);
+
+        gl.uniform2f(loc.uvScale, uvScale[0], uvScale[1]);
+        gl.uniform2f(loc.uvOffset, uvOffset[0], uvOffset[1]);
+        gl.uniform2f(loc.hTexel, 1 / HEIGHT_W, 1 / HEIGHT_H);
+        gl.uniform2f(loc.cursor, smooth.current[0], smooth.current[1]);
+        gl.uniform1f(loc.amount, eased);
+        gl.uniform1f(loc.aspect, aspect);
+        gl.uniform1f(loc.hasHeight, heightLoaded ? 1 : 0);
+        gl.uniform3fv(loc.envLow, env.low as unknown as number[]);
+        gl.uniform3fv(loc.envHigh, env.high as unknown as number[]);
+        gl.uniform3fv(loc.envBand, env.band as unknown as number[]);
+        gl.uniform3fv(loc.envBounce, env.bounce as unknown as number[]);
+        gl.uniform3fv(loc.specTint, env.specTint as unknown as number[]);
+        gl.uniform3fv(loc.fresnelTint, env.fresnelTint as unknown as number[]);
+
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-        // Reveal the canvas only once it holds a real frame, so the swap from
-        // <img> to canvas is seamless and never shows a black rectangle.
-        // Guarded: exactly one React state update for the whole lifetime.
         if (!revealed) {
           revealed = true;
           setReady(true);
         }
       }
 
-      // Nothing animates on its own. The loop runs only while the pointer is
-      // easing, the attack is ramping, or the trail is reconstructing.
+      // Nothing animates on its own.
       const moving =
-        Math.abs(target.current[0] - smooth.current[0]) > 0.0004 ||
-        Math.abs(target.current[1] - smooth.current[1]) > 0.0004 ||
-        (active.current && attack.current < 0.999) ||
-        decaying;
+        (active.current &&
+          (Math.abs(target.current[0] - smooth.current[0]) > 0.0004 ||
+            Math.abs(target.current[1] - smooth.current[1]) > 0.0004 ||
+            amount.current < 0.999)) ||
+        (!active.current && amount.current > 0);
 
       if (moving) raf = requestAnimationFrame(frame);
       else running = false;
@@ -529,28 +532,11 @@ export function InteractiveFace() {
       ];
     };
 
-    const advanceTrail = () => {
-      const pts = trail.current;
-      const head = pts[pts.length - 1];
-      if (!head) {
-        pts.push({ x: smooth.current[0], y: smooth.current[1], t: performance.now() });
-        return;
-      }
-      const dx = (smooth.current[0] - head.x) * aspect;
-      const dy = smooth.current[1] - head.y;
-      if (dx * dx + dy * dy >= TUNING.TRAIL_SPACING * TUNING.TRAIL_SPACING) {
-        // Freeze the current head; it now reconstructs on its own.
-        pts.push({ x: smooth.current[0], y: smooth.current[1], t: performance.now() });
-        if (pts.length > TRAIL_N) pts.shift();
-      }
-    };
-
     const begin = (p: [number, number]) => {
       if (!active.current) {
+        // Enter with no slide-in: the lens starts under the pointer.
         smooth.current[0] = p[0];
         smooth.current[1] = p[1];
-        trail.current.push({ x: p[0], y: p[1], t: performance.now() });
-        if (trail.current.length > TRAIL_N) trail.current.shift();
       }
       active.current = true;
       target.current[0] = p[0];
@@ -562,14 +548,7 @@ export function InteractiveFace() {
       // On touch, only track with the finger down; a stray hover must not latch.
       if (e.pointerType !== 'mouse' && !active.current) return;
       const p = toUv(e);
-      if (!p) return;
-      if (!active.current) begin(p);
-      else {
-        target.current[0] = p[0];
-        target.current[1] = p[1];
-        advanceTrail();
-        requestRender();
-      }
+      if (p) begin(p);
     };
     const onDown = (e: PointerEvent) => { const p = toUv(e); if (p) begin(p); };
     const onEnter = (e: PointerEvent) => {
@@ -577,15 +556,7 @@ export function InteractiveFace() {
       const p = toUv(e);
       if (p) begin(p);
     };
-    const onLeave = () => {
-      // Restamp the head so it begins its delayed reconstruction from now,
-      // rather than snapping away with the pointer.
-      const pts = trail.current;
-      if (pts.length) pts[pts.length - 1].t = performance.now();
-      active.current = false;
-      attack.current = 0;
-      requestRender();
-    };
+    const onLeave = () => { active.current = false; requestRender(); };
 
     container.addEventListener('pointermove', onMove);
     container.addEventListener('pointerdown', onDown);
@@ -609,6 +580,18 @@ export function InteractiveFace() {
 
     const ro = new ResizeObserver(resize);
     ro.observe(container);
+
+    // Theme changes swap the reflection environment without a React re-render
+    // and without tearing down the GL context.
+    const themeObserver = new MutationObserver(() => {
+      const next = document.documentElement.classList.contains('dark');
+      if (next !== isDark) {
+        isDark = next;
+        requestRender();
+      }
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
     resize();
 
     return () => {
@@ -623,9 +606,12 @@ export function InteractiveFace() {
       document.removeEventListener('visibilitychange', onVisibility);
       io.disconnect();
       ro.disconnect();
-      img.onload = null;
+      themeObserver.disconnect();
+      photo.onload = null;
+      height.onload = null;
       gl.deleteBuffer(quad);
       gl.deleteTexture(photoTex);
+      gl.deleteTexture(heightTex);
       gl.deleteProgram(prog);
       shaders.forEach((s) => gl.deleteShader(s));
       // No WEBGL_lose_context: the browser lifecycle destroys the context.
@@ -636,11 +622,14 @@ export function InteractiveFace() {
     <div
       ref={containerRef}
       id="hero-portrait"
-      className="relative w-full max-w-[400px] aspect-[3/4] mx-auto lg:max-w-none rounded-2xl overflow-hidden border border-border bg-[#050506]"
+      /* Themed panel background. Both the <img> and the canvas are transparent
+         outside the subject, so this is what surrounds the portrait - a light
+         card in light theme, a dark one in dark theme. Never a black box. */
+      className="relative w-full max-w-[400px] aspect-[3/4] mx-auto lg:max-w-none rounded-2xl overflow-hidden border border-border bg-gradient-to-b from-[#eef2f8] to-[#dde5f0] shadow-lg shadow-slate-900/10 dark:from-[#0c1016] dark:to-[#070a0f] dark:shadow-none"
     >
-      {/* Paints immediately and is also the permanent fallback if WebGL is
-          unavailable or shader compilation fails. objectPosition must match
-          CROP_TOP_BIAS so the canvas is pixel-aligned when it fades in. */}
+      {/* Paints immediately and is the permanent fallback if WebGL is
+          unavailable or a shader fails. objectPosition must match
+          CROP_TOP_BIAS so the canvas is aligned when it fades in. */}
       <Image
         src={PORTRAIT_SRC}
         alt="Sarthak Roy"
