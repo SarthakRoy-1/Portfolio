@@ -53,18 +53,52 @@ const HEIGHT_H = 286;
  * -------------------------------------------------------------------------*/
 const TUNING = {
   /** Lens radius, height-normalised. Small: a local patch, never the head. */
-  CURSOR_RADIUS: 0.115,
-  /** Inner edge as a fraction of the radius. Low = wide feather, so the
-   *  boundary never reads as a circular sticker. */
+  CURSOR_RADIUS: 0.125,
+  /** Inner edge as a fraction of the radius. */
   CURSOR_FEATHER: 0.10,
-  /** Pointer easing per frame (1.0 = instant). High: tracking must not lag. */
-  CURSOR_SMOOTHING: 0.55,
 
-  /** Chrome appears essentially instantly under the pointer. */
-  CHROME_ATTACK: 0.45,
-  /** On leave the metal reconstructs back into the photo over this long.
-   *  Short enough that it never reads as a smear or a trail. */
+  /* --- pointer as a physical disturbance ------------------------------- */
+  /** Damped spring toward the pointer. The lag is what gives the liquid
+   *  inertia instead of snapping to the cursor. */
+  SPRING_K: 0.24,
+  SPRING_DAMP: 0.70,
+  /** Pointer speed (uv/frame) treated as "fast". Normalises u_speed to 0..1. */
+  SPEED_REF: 0.022,
+  /** How far the liquid trails behind the pointer at full speed. */
+  DRAG_LAG: 0.032,
+  /** Elongation along the direction of travel at full speed. */
+  DRAG_STRETCH: 0.75,
+
+  /** Chrome forms over ~220ms rather than popping into existence. */
+  CHROME_ATTACK: 0.22,
+  /** On leave the metal contracts and flows inward over this long. */
   CHROME_RELEASE_MS: 620,
+  /** Radius spring. Overshoots slightly on enter, contracts on leave. */
+  RADIUS_K: 0.20,
+  RADIUS_DAMP: 0.62,
+  /** Radius multiplier once the liquid has fully withdrawn. */
+  RADIUS_COLLAPSED: 0.16,
+
+  /* --- liquid surface --------------------------------------------------- */
+  /** Multi-scale flow field. Advected by pointer motion only, so when the
+   *  cursor stops the surface stops - it settles, it does not pulse. */
+  FLOW_SCALE: 12.0,
+  FLOW_ADVECT: 2.6,
+  /** Height added inside the lens: the metal rises out of the skin. */
+  LIQUID_LIFT: 0.17,
+  /** Amplitude of the flowing surface waves. */
+  LIQUID_WAVE: 0.30,
+  /** Resting turbulence once settled (never fully zero, never pulsing). */
+  TURB_REST: 0.12,
+  TURB_EASE: 0.18,
+  /** Damped ripple emitted on enter and on leave. */
+  RIPPLE_FREQ: 52.0,
+  RIPPLE_SPEED: 7.5,
+  RIPPLE_FALLOFF: 13.0,
+  RIPPLE_HEIGHT: 0.11,
+  RIPPLE_DECAY: 0.87,
+  /** How hard the liquid field chews up the boundary. */
+  EDGE_DEFORM: 0.95,
 
   /** Surface shape. Normals come from the baked height map only. */
   NORMAL_STRENGTH: 13.0,
@@ -88,10 +122,8 @@ const TUNING = {
   /** Refraction-like warp. Tiny: the face must not move. */
   DISTORTION: 0.006,
 
-  /** Organic edge modulation so the lens blends like liquid, not a spotlight. */
-  EDGE_NOISE_SCALE: 14.0,
-  EDGE_NOISE_AMOUNT: 0.4,
-  EDGE_SOFTNESS: 0.3,
+  /** Softness of the final liquid boundary. */
+  EDGE_SOFTNESS: 0.26,
 };
 
 /** Studio environments sampled by the reflection vector, per theme. */
@@ -144,11 +176,18 @@ const FS = `
   uniform sampler2D u_height;
   uniform vec2 u_uvScale;
   uniform vec2 u_uvOffset;
-  uniform vec2 u_hTexel;
   uniform vec2 u_cursor;
   uniform float u_amount;
   uniform float u_aspect;
   uniform float u_hasHeight;
+  uniform vec2 u_velDir;     // normalised direction of travel
+  uniform float u_speed;     // 0..1 normalised pointer speed
+  uniform vec2 u_flow;       // flow field offset, advected by pointer motion
+  uniform float u_turb;      // surface turbulence, decays as the liquid settles
+  uniform float u_radiusF;   // radius multiplier (expands on enter, contracts on leave)
+  uniform float u_rippleAmp;
+  uniform float u_rippleT;
+  uniform vec2 u_nStep;      // normal sampling step, in container uv
 
   uniform vec3 u_envLow;
   uniform vec3 u_envHigh;
@@ -166,6 +205,46 @@ const FS = `
     vec2 u = fr * fr * (3.0 - 2.0 * fr);
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
                mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+  }
+
+  float fbm2(vec2 p) {
+    return vnoise(p) * 0.62 + vnoise(p * 2.6 + vec2(13.1, 7.3)) * 0.38;
+  }
+
+  /* Interaction field. x = envelope (1 at the core, 0 outside), y = distance.
+     The pointer is a physical disturbance: the field trails BEHIND the cursor
+     by DRAG_LAG and elongates along the direction of travel by DRAG_STRETCH,
+     both scaled by speed. Standing still it is compact; moving fast it
+     stretches into the direction of motion. */
+  vec2 fieldAt(vec2 uv) {
+    vec2 q = uv - u_cursor;
+    q.x *= u_aspect;
+    float along = dot(q, u_velDir);
+    vec2 perpV = q - along * u_velDir;
+    float a2 = (along + u_speed * ${f(TUNING.DRAG_LAG)})
+             / (1.0 + u_speed * ${f(TUNING.DRAG_STRETCH)});
+    float dd = length(vec2(a2, length(perpV)));
+    float rOut = ${f(TUNING.CURSOR_RADIUS)} * u_radiusF;
+    float env = 1.0 - smoothstep(rOut * ${f(TUNING.CURSOR_FEATHER)}, rOut, dd);
+    return vec2(env, dd);
+  }
+
+  float ringAt(float dd) {
+    return sin(dd * ${f(TUNING.RIPPLE_FREQ)} - u_rippleT * ${f(TUNING.RIPPLE_SPEED)})
+         * exp(-dd * ${f(TUNING.RIPPLE_FALLOFF)}) * u_rippleAmp;
+  }
+
+  /* The surface the chrome actually reflects: the baked facial height field
+     PLUS the liquid displacement. Normals are taken from this sum, which is
+     what makes the metal deform the face rather than sit on top of it. */
+  float surfaceH(vec2 uv) {
+    vec2 puv = u_uvOffset + uv * u_uvScale;
+    float base = hgt(puv);
+    vec2 fd = fieldAt(uv);
+    float l = fbm2(uv * ${f(TUNING.FLOW_SCALE)} + u_flow);
+    return base
+         + fd.x * (${f(TUNING.LIQUID_LIFT)} + (l - 0.5) * ${f(TUNING.LIQUID_WAVE)} * u_turb)
+         + ringAt(fd.y) * ${f(TUNING.RIPPLE_HEIGHT)};
   }
 
   /* Analytic studio environment. Broad coherent bands - a bright overhead
@@ -186,23 +265,20 @@ const FS = `
     vec4 tex = texture2D(u_photo, puv);
     float subject = tex.a;
 
-    // Soft, aspect-corrected radial lens with organic edge modulation, so the
-    // boundary blends like liquid rather than a CSS spotlight.
-    vec2 d = v_uv - u_cursor;
-    d.x *= u_aspect;
-    float dist = length(d);
-    float wob = (vnoise(v_uv * ${f(TUNING.EDGE_NOISE_SCALE)}) - 0.5)
-              * ${f(TUNING.EDGE_NOISE_AMOUNT)};
-    float rIn = ${f(TUNING.CURSOR_RADIUS)} * ${f(TUNING.CURSOR_FEATHER)};
-    float rOut = ${f(TUNING.CURSOR_RADIUS)} * (1.0 + wob * 0.35);
-    float raw = (1.0 - smoothstep(rIn, rOut, dist)) * u_amount;
-
-    // Break the retreating edge up so it reads as reconstruction, never a
-    // hard fade. Subtracting guarantees mask == 0 wherever raw == 0, so
-    // nothing can leak outside the lens.
-    float nz = vnoise(v_uv * ${f(TUNING.EDGE_NOISE_SCALE)} * 1.7);
-    float perturbed = raw - nz * 0.45 * (1.0 - raw);
-    float mask = smoothstep(0.0, ${f(TUNING.EDGE_SOFTNESS)}, perturbed) * subject;
+    // Liquid boundary. The velocity-stretched envelope is chewed up by the
+    // same flow field that displaces the surface, plus the damped ripple, so
+    // the edge is irregular and moving - never a radial-gradient circle.
+    vec2 fd = fieldAt(v_uv);
+    float cover = fd.x;
+    float liquid = fbm2(v_uv * ${f(TUNING.FLOW_SCALE)} + u_flow);
+    // Subtract-only, weighted by (1 - cover), and the ripple is windowed by
+    // cover: both guarantee field <= 0 wherever cover == 0, so the liquid can
+    // chew the boundary inward but can never leak outside the disturbance.
+    float field = cover
+                - liquid * ${f(TUNING.EDGE_DEFORM)} * (1.0 - cover)
+                + ringAt(fd.y) * 0.35 * cover;
+    // Subtracting keeps mask == 0 wherever env == 0, so nothing leaks out.
+    float mask = smoothstep(0.0, ${f(TUNING.EDGE_SOFTNESS)}, field) * subject * u_amount;
 
     // Outside the lens: the untouched photograph, premultiplied.
     if (mask < 0.002 || u_hasHeight < 0.5) {
@@ -210,13 +286,17 @@ const FS = `
       return;
     }
 
-    // --- smooth facial normals from the baked height map --------------------
-    vec2 e = u_hTexel * ${f(TUNING.NORMAL_SAMPLE)};
-    float hx = hgt(puv + vec2(e.x, 0.0)) - hgt(puv - vec2(e.x, 0.0));
-    float hy = hgt(puv + vec2(0.0, e.y)) - hgt(puv - vec2(0.0, e.y));
+    // --- normals from the DISPLACED surface ---------------------------------
+    // Face height + liquid lift + flow waves + ripple. Because the reflection
+    // is derived from this, moving the pointer moves the surface, which moves
+    // the normal, which moves the highlight across the facial geometry.
+    float hR = surfaceH(v_uv + vec2(u_nStep.x, 0.0));
+    float hL = surfaceH(v_uv - vec2(u_nStep.x, 0.0));
+    float hD = surfaceH(v_uv + vec2(0.0, u_nStep.y));
+    float hU = surfaceH(v_uv - vec2(0.0, u_nStep.y));
     vec3 N = normalize(vec3(
-      -hx * ${f(TUNING.NORMAL_STRENGTH)},
-       hy * ${f(TUNING.NORMAL_STRENGTH)},
+      -(hR - hL) * ${f(TUNING.NORMAL_STRENGTH)},
+       (hD - hU) * ${f(TUNING.NORMAL_STRENGTH)},
        1.0
     ));
 
@@ -269,6 +349,15 @@ export function InteractiveFace() {
   const smooth = useRef<[number, number]>([0.5, 0.45]);
   const active = useRef(false);
   const amount = useRef(0);
+  const posVel = useRef<[number, number]>([0, 0]);
+  const velDir = useRef<[number, number]>([1, 0]);
+  const speed = useRef(0);
+  const radiusF = useRef(0.35);
+  const radiusVel = useRef(0);
+  const turb = useRef(TUNING.TURB_REST);
+  const flow = useRef<[number, number]>([0, 0]);
+  const rippleAmp = useRef(0);
+  const rippleT = useRef(0);
 
   useEffect(() => {
     // Every browser API below is reached only here, after client mount.
@@ -348,11 +437,18 @@ export function InteractiveFace() {
       height: gl.getUniformLocation(prog, 'u_height'),
       uvScale: gl.getUniformLocation(prog, 'u_uvScale'),
       uvOffset: gl.getUniformLocation(prog, 'u_uvOffset'),
-      hTexel: gl.getUniformLocation(prog, 'u_hTexel'),
       cursor: gl.getUniformLocation(prog, 'u_cursor'),
       amount: gl.getUniformLocation(prog, 'u_amount'),
       aspect: gl.getUniformLocation(prog, 'u_aspect'),
       hasHeight: gl.getUniformLocation(prog, 'u_hasHeight'),
+      velDir: gl.getUniformLocation(prog, 'u_velDir'),
+      speed: gl.getUniformLocation(prog, 'u_speed'),
+      flow: gl.getUniformLocation(prog, 'u_flow'),
+      turb: gl.getUniformLocation(prog, 'u_turb'),
+      radiusF: gl.getUniformLocation(prog, 'u_radiusF'),
+      rippleAmp: gl.getUniformLocation(prog, 'u_rippleAmp'),
+      rippleT: gl.getUniformLocation(prog, 'u_rippleT'),
+      nStep: gl.getUniformLocation(prog, 'u_nStep'),
       envLow: gl.getUniformLocation(prog, 'u_envLow'),
       envHigh: gl.getUniformLocation(prog, 'u_envHigh'),
       envBand: gl.getUniformLocation(prog, 'u_envBand'),
@@ -456,17 +552,75 @@ export function InteractiveFace() {
       const dt = lastT ? Math.min(now - lastT, 100) : 16.7;
       lastT = now;
 
-      const ease = reduceMotion ? 1 : TUNING.CURSOR_SMOOTHING;
-      if (active.current) {
-        smooth.current[0] += (target.current[0] - smooth.current[0]) * ease;
-        smooth.current[1] += (target.current[1] - smooth.current[1]) * ease;
-        // Instant attack.
-        amount.current += (1 - amount.current) * (reduceMotion ? 1 : TUNING.CHROME_ATTACK);
+      const prevX = smooth.current[0];
+      const prevY = smooth.current[1];
+
+      if (reduceMotion) {
+        // Static localized transformation: no springs, no flow, no ripple.
+        smooth.current[0] = target.current[0];
+        smooth.current[1] = target.current[1];
+        amount.current = active.current ? 1 : 0;
+        radiusF.current = active.current ? 1 : TUNING.RADIUS_COLLAPSED;
+        turb.current = 0;
+        rippleAmp.current = 0;
+        speed.current = 0;
       } else {
-        // Delayed release: the lens reconstructs in place. The position is
-        // frozen, so there is never a trail or residue behind the cursor.
-        amount.current -= reduceMotion ? 1 : dt / TUNING.CHROME_RELEASE_MS;
+        // Damped spring toward the pointer: the liquid carries inertia and
+        // lags slightly instead of snapping to the cursor.
+        if (active.current) {
+          posVel.current[0] += (target.current[0] - smooth.current[0]) * TUNING.SPRING_K;
+          posVel.current[1] += (target.current[1] - smooth.current[1]) * TUNING.SPRING_K;
+        }
+        posVel.current[0] *= TUNING.SPRING_DAMP;
+        posVel.current[1] *= TUNING.SPRING_DAMP;
+        smooth.current[0] += posVel.current[0];
+        smooth.current[1] += posVel.current[1];
+
+        // Velocity drives direction, stretch and turbulence.
+        const dx = smooth.current[0] - prevX;
+        const dy = smooth.current[1] - prevY;
+        const mag = Math.sqrt(dx * dx + dy * dy);
+        if (mag > 1e-5) {
+          velDir.current[0] = dx / mag;
+          velDir.current[1] = dy / mag;
+        }
+        const sNorm = clamp(mag / TUNING.SPEED_REF, 0, 1);
+        speed.current += (sNorm - speed.current) * 0.25;
+
+        // Flow is advected ONLY by pointer motion, so a stationary cursor
+        // means a stationary surface: the liquid settles, it never pulses.
+        flow.current[0] -= dx * TUNING.FLOW_ADVECT * TUNING.FLOW_SCALE;
+        flow.current[1] -= dy * TUNING.FLOW_ADVECT * TUNING.FLOW_SCALE;
+
+        turb.current +=
+          (Math.max(speed.current, TUNING.TURB_REST) - turb.current) * TUNING.TURB_EASE;
+
+        if (active.current) {
+          // Enter: a spring that overshoots slightly, so the metal grows out
+          // of the skin and settles rather than popping in at full size.
+          radiusVel.current += (1 - radiusF.current) * TUNING.RADIUS_K;
+          radiusVel.current *= TUNING.RADIUS_DAMP;
+          radiusF.current += radiusVel.current;
+          amount.current += (1 - amount.current) * TUNING.CHROME_ATTACK;
+        } else {
+          // Leave: the radius is driven by the release timeline rather than a
+          // spring, so the liquid takes the full CHROME_RELEASE_MS to flow
+          // inward. A spring here collapsed it in ~100ms, which read as a
+          // plain cut rather than a withdrawal.
+          amount.current -= dt / TUNING.CHROME_RELEASE_MS;
+          const a = clamp(amount.current, 0, 1);
+          const ae = a * a * (3 - 2 * a);
+          radiusVel.current = 0;
+          radiusF.current = TUNING.RADIUS_COLLAPSED + (1 - TUNING.RADIUS_COLLAPSED) * ae;
+        }
+
+        rippleAmp.current *= TUNING.RIPPLE_DECAY;
+        rippleT.current += dt * 0.001;
       }
+
+      // Snap the asymptotic tail so the loop stops once the formation is
+      // visually complete instead of spinning on invisible convergence.
+      if (amount.current > 0.995) amount.current = 1;
       amount.current = clamp(amount.current, 0, 1);
       const eased = amount.current * amount.current * (3 - 2 * amount.current);
 
@@ -491,11 +645,22 @@ export function InteractiveFace() {
 
         gl.uniform2f(loc.uvScale, uvScale[0], uvScale[1]);
         gl.uniform2f(loc.uvOffset, uvOffset[0], uvOffset[1]);
-        gl.uniform2f(loc.hTexel, 1 / HEIGHT_W, 1 / HEIGHT_H);
         gl.uniform2f(loc.cursor, smooth.current[0], smooth.current[1]);
         gl.uniform1f(loc.amount, eased);
         gl.uniform1f(loc.aspect, aspect);
         gl.uniform1f(loc.hasHeight, heightLoaded ? 1 : 0);
+        gl.uniform2f(loc.velDir, velDir.current[0], velDir.current[1]);
+        gl.uniform1f(loc.speed, speed.current);
+        gl.uniform2f(loc.flow, flow.current[0], flow.current[1]);
+        gl.uniform1f(loc.turb, turb.current);
+        gl.uniform1f(loc.radiusF, Math.max(radiusF.current, 0.01));
+        gl.uniform1f(loc.rippleAmp, rippleAmp.current);
+        gl.uniform1f(loc.rippleT, rippleT.current);
+        gl.uniform2f(
+          loc.nStep,
+          (TUNING.NORMAL_SAMPLE / HEIGHT_W) / uvScale[0],
+          (TUNING.NORMAL_SAMPLE / HEIGHT_H) / uvScale[1],
+        );
         gl.uniform3fv(loc.envLow, env.low as unknown as number[]);
         gl.uniform3fv(loc.envHigh, env.high as unknown as number[]);
         gl.uniform3fv(loc.envBand, env.band as unknown as number[]);
@@ -511,13 +676,19 @@ export function InteractiveFace() {
         }
       }
 
-      // Nothing animates on its own.
-      const moving =
-        (active.current &&
-          (Math.abs(target.current[0] - smooth.current[0]) > 0.0004 ||
-            Math.abs(target.current[1] - smooth.current[1]) > 0.0004 ||
-            amount.current < 0.999)) ||
-        (!active.current && amount.current > 0);
+      // Nothing animates on its own: the loop runs only while the spring, the
+      // radius, the turbulence or the ripple are still settling.
+      const settled =
+        Math.abs(posVel.current[0]) < 2e-5 &&
+        Math.abs(posVel.current[1]) < 2e-5 &&
+        Math.abs(target.current[0] - smooth.current[0]) < 4e-4 &&
+        Math.abs(target.current[1] - smooth.current[1]) < 4e-4 &&
+        Math.abs(radiusVel.current) < 2e-4 &&
+        Math.abs(radiusF.current - 1) < 5e-3 &&
+        Math.abs(turb.current - TUNING.TURB_REST) < 1.2e-2 &&
+        rippleAmp.current < 0.02 &&
+        amount.current >= 1;
+      const moving = active.current ? !settled : amount.current > 0;
 
       if (moving) raf = requestAnimationFrame(frame);
       else running = false;
@@ -532,11 +703,19 @@ export function InteractiveFace() {
       ];
     };
 
+    const emitRipple = () => { rippleAmp.current = 1; rippleT.current = 0; };
+
     const begin = (p: [number, number]) => {
       if (!active.current) {
-        // Enter with no slide-in: the lens starts under the pointer.
+        // Enter: the surface is disturbed at the contact point and the metal
+        // grows outward from it rather than popping in as a finished circle.
         smooth.current[0] = p[0];
         smooth.current[1] = p[1];
+        posVel.current[0] = 0;
+        posVel.current[1] = 0;
+        radiusF.current = 0.3;
+        radiusVel.current = 0;
+        emitRipple();
       }
       active.current = true;
       target.current[0] = p[0];
@@ -556,7 +735,13 @@ export function InteractiveFace() {
       const p = toUv(e);
       if (p) begin(p);
     };
-    const onLeave = () => { active.current = false; requestRender(); };
+    const onLeave = () => {
+      // Leave: one last disturbance, then the liquid loses energy, contracts
+      // and flows inward before the photograph returns exactly.
+      if (active.current) emitRipple();
+      active.current = false;
+      requestRender();
+    };
 
     container.addEventListener('pointermove', onMove);
     container.addEventListener('pointerdown', onDown);
