@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Edge runtime avoids Node.js function cold-start overhead: measured
-// 883-1700ms for this route under the nodejs runtime even on the
-// zero-external-call validation-rejection path, before it ever reaches
-// the Resend fetch. The route only uses fetch/JSON/RegExp - no Node API -
-// so it is fully edge-compatible.
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 const RECIPIENT_EMAIL = 'sarthakroy40@gmail.com';
 const RESEND_API_URL = 'https://api.resend.com/emails';
