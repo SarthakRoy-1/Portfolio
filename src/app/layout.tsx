@@ -1,12 +1,20 @@
 import React from 'react';
 import type { Metadata } from 'next';
+import dynamic from 'next/dynamic';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { constructMetadata } from '@/lib/metadata';
-import { CustomCursor } from '@/components/interaction/CustomCursor';
 import '@/styles/globals.css';
+
+// Pure desktop-only decoration with no SSR content (it renders null until a
+// client-side matchMedia check passes) - safe to keep out of the initial
+// server-rendered HTML and the main hydration bundle entirely.
+const CustomCursor = dynamic(
+  () => import('@/components/interaction/CustomCursor').then((m) => m.CustomCursor),
+  { ssr: false }
+);
 
 const inter = Inter({
   subsets: ['latin'],
