@@ -203,3 +203,24 @@ html.dark::view-transition-old(root) {
     clip-path: circle(0% at 50% 50%);
   }
 }
+
+/* Hero entrance reveal - CSS-driven equivalent of the previous Framer
+   Motion fade/slide-up (opacity 0->1, y 15px->0, ~critically-damped
+   spring feel). Runs on the compositor from first paint, so the hero
+   heading (the mobile LCP element) and portrait panel (the desktop LCP
+   element) no longer wait on JS hydration to become visible - hydration
+   only needs to attach interactivity, not gate visibility. */
+@keyframes hero-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-reveal {
+  animation: hero-reveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
