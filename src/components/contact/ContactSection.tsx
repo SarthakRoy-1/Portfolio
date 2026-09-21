@@ -25,6 +25,7 @@ export function ContactSection() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (status === 'submitting') return;
 
     if (!formState.name.trim() || !formState.email.trim() || !formState.message.trim()) {
       setStatus('error');
@@ -42,20 +43,27 @@ export function ContactSection() {
     setStatus('submitting');
     setErrorMessage('');
 
-    // Construct mailto link with encoded subject and body
-    const emailSubject = encodeURIComponent(formState.subject || `Inquiry from ${formState.name} via Portfolio`);
-    const emailBody = encodeURIComponent(
-      `Name: ${formState.name}\nEmail: ${formState.email}\n\nMessage:\n${formState.message}`
-    );
-    const mailtoUrl = `mailto:sarthakroy40@gmail.com?subject=${emailSubject}&body=${emailBody}`;
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formState),
+      });
 
-    // Trigger user's email client
-    window.location.href = mailtoUrl;
+      const data = await response.json().catch(() => ({}));
 
-    setTimeout(() => {
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send your message. Please try again.');
+      }
+
       setStatus('success');
       setFormState({ name: '', email: '', subject: '', message: '' });
-    }, 600);
+    } catch (error) {
+      setStatus('error');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Something went wrong. Please try again or email directly.'
+      );
+    }
   };
 
   return (
@@ -127,7 +135,7 @@ export function ContactSection() {
                 </a>
 
                 <a
-                  href="/resume.pdf"
+                  href="/Resume.pdf"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-between p-3.5 rounded-xl bg-surface-secondary border border-border hover:border-primary/40 text-xs font-mono transition-colors group"

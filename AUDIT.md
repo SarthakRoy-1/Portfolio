@@ -74,7 +74,7 @@
 Portfolio/
 ├── public/
 │   ├── images/
-│   └── resume.pdf
+│   └── Resume.pdf
 ├── src/
 │   ├── app/
 │   │   ├── layout.tsx
