@@ -59,13 +59,17 @@ export function SystemPerceptionPipeline() {
           </div>
         </div>
 
-        {/* Desktop Horizontal Landscape Pipeline Diagram (lg+) */}
+        {/* Desktop Horizontal Landscape Pipeline Diagram (xl+).
+            6 stage cards at min-w-[150px] plus connectors need ~1160px of
+            content width; xl (1280px) is the first breakpoint that fits
+            without overflow - lg (1024px) left a real horizontal-scroll gap
+            between 1024-1180px (classic iPad landscape, split-screen windows). */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, margin: '-5%' }}
-          className="hidden lg:flex items-center justify-between gap-1.5 p-4 rounded-2xl bg-surface/60 border border-border shadow-subtle backdrop-blur-sm relative"
+          className="hidden xl:flex items-center justify-between gap-1.5 p-4 rounded-2xl bg-surface/60 border border-border shadow-subtle backdrop-blur-sm relative"
         >
           {pipelineStagesData.map((stage, index) => {
             const isActive = stage.id === activeStageId;
@@ -94,13 +98,13 @@ export function SystemPerceptionPipeline() {
           })}
         </motion.div>
 
-        {/* Mobile & Tablet Responsive Pipeline Grid (<lg) */}
+        {/* Mobile & Tablet Responsive Pipeline Grid (<xl) */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, margin: '-5%' }}
-          className="lg:hidden grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3 rounded-2xl bg-surface/60 border border-border"
+          className="xl:hidden grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3 rounded-2xl bg-surface/60 border border-border"
         >
           {pipelineStagesData.map((stage, index) => (
             <motion.div key={stage.id} variants={itemVariants}>
