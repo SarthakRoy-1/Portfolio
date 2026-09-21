@@ -38,8 +38,8 @@ export function constructMetadata({
       canonical: canonical || siteConfig.url,
     },
     icons: {
-      icon: '/Profile SVG.png',
-      apple: '/Profile SVG.png',
+      icon: '/favicon.png',
+      apple: '/favicon.png',
     },
     openGraph: {
       title,
