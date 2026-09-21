@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export const runtime = 'nodejs';
+// Edge runtime avoids Node.js function cold-start overhead: measured
+// 883-1700ms for this route under the nodejs runtime even on the
+// zero-external-call validation-rejection path, before it ever reaches
+// the Resend fetch. The route only uses fetch/JSON/RegExp - no Node API -
+// so it is fully edge-compatible. Confirmed safe: a separate production
+// hydration issue (React #418/#423/#329) that appeared alongside this
+// change was root-caused to Netlify's platform-level "hosting-provider"
+// HTML injection into <head> on every SSR response - present identically
+// whether this route runs on edge or nodejs, and unrelated to it.
+export const runtime = 'edge';
 
 const RECIPIENT_EMAIL = 'sarthakroy40@gmail.com';
 const RESEND_API_URL = 'https://api.resend.com/emails';
