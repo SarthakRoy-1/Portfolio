@@ -53,7 +53,7 @@ export function AboutSection() {
             <div className="pt-4 flex flex-wrap items-center gap-3">
               <MagneticButton>
                 <Button
-                  href="/resume.pdf"
+                  href="/Resume.pdf"
                   external
                   variant="primary"
                   size="md"
