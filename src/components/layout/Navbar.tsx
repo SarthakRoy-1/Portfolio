@@ -103,7 +103,7 @@ export function Navbar() {
         <div className="hidden lg:flex items-center gap-3">
           <ThemeToggle />
           <Button
-            href="/resume.pdf"
+            href="/Resume.pdf"
             external
             variant="outline"
             size="sm"
@@ -147,7 +147,7 @@ export function Navbar() {
 
           <div className="pt-6 border-t border-border space-y-3">
             <Button
-              href="/resume.pdf"
+              href="/Resume.pdf"
               external
               variant="primary"
               size="lg"
