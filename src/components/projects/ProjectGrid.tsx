@@ -24,8 +24,8 @@ export function ProjectGrid() {
     : featuredProjects.filter(p => p.category.toUpperCase() === filter);
 
   return (
-    <section id="projects" className="py-32 md:py-48 border-t border-border">
-      <div className="max-w-site-desktop mx-auto px-5 md:px-8">
+    <section className="py-20 md:py-28 border-t border-border">
+      <div id="projects" className="scroll-mt-[var(--anchor-offset)] max-w-site-desktop mx-auto px-5 md:px-8">
         <ScrollReveal>
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
             <SectionHeading

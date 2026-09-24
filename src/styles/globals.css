@@ -83,6 +83,12 @@
   html {
     scroll-behavior: smooth;
     color-scheme: dark;
+    /* Where a section's first line lands after an in-page nav click: the
+       fixed header (~4.25rem once scrolled) plus a small deliberate gap.
+       Section anchors sit on the inner content container, not the padded
+       <section>, so this is the same for every section whatever its own
+       vertical padding is. */
+    --anchor-offset: 6rem;
   }
 
   html.light {

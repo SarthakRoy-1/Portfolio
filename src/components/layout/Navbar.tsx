@@ -10,10 +10,12 @@ import { Menu, X, FileText, ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export const navLinks = [
+  { name: 'ARCHITECTURE', href: '/#pipeline' },
   { name: 'SYSTEMS', href: '/#projects' },
   { name: 'EXPERIENCE', href: '/#experience' },
   { name: 'STACK', href: '/#skills' },
   { name: 'RESEARCH', href: '/#research' },
+  { name: 'ABOUT', href: '/#about' },
   { name: 'CONTACT', href: '/#contact' },
 ];
 
@@ -87,7 +89,7 @@ export function Navbar() {
                 key={link.name}
                 href={link.href}
                 className={cn(
-                  'px-3.5 py-1.5 text-xs font-medium rounded-full transition-colors',
+                  'px-2 xl:px-3.5 py-1.5 text-xs font-medium rounded-full transition-colors',
                   isProjectsActive
                     ? 'text-primary bg-primary-muted font-semibold'
                     : 'text-muted hover:text-foreground hover:bg-surface-secondary'

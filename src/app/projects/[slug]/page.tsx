@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import {
   ArrowLeft,
+  ArrowUpRight,
   Github,
   Layers,
   ShieldCheck,
@@ -359,6 +360,18 @@ export default function ProjectCaseStudyPage({
                 <span className="font-mono text-xs uppercase tracking-wider font-bold text-foreground block">
                   Project Links
                 </span>
+                {project.demo && (
+                  <Button
+                    href={project.demo}
+                    external
+                    variant="primary"
+                    size="md"
+                    className="w-full font-mono text-xs gap-2"
+                  >
+                    <ArrowUpRight className="w-4 h-4" />
+                    <span>Open Live Demo</span>
+                  </Button>
+                )}
                 {project.github && (
                   <Button
                     href={project.github}

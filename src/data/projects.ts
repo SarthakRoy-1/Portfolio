@@ -368,6 +368,74 @@ export const projectsData: Project[] = [
     github: 'https://github.com/SarthakRoy-1',
   },
   {
+    slug: 'astrion-logistics-support',
+    title: 'ASTRION: AI Logistics Support Agent',
+    shortDescription:
+      'Source-grounded support agent for logistics operations that answers order, ticket and policy questions from SOPs and signed customer agreements, computes fees and credits in code, and changes nothing without confirmation.',
+    category: 'Generative AI',
+    status: 'completed',
+    featured: true,
+    priority: 7,
+    technologies: ['RAG', 'Agentic Tool Use', 'Source Citations', 'Human-in-the-Loop', 'Next.js', 'Vercel'],
+    problem:
+      'Logistics support answers depend on order records, open tickets and contract terms, and figures such as cancellation fees and service credits must be exact. A model that writes those numbers itself, cites nothing, or changes records unprompted cannot be trusted or audited.',
+    approach:
+      'Built a support agent that grounds every answer in retrieved policies, SOPs, product documentation and signed customer agreements with each source shown, looks up orders, tickets and accounts at request time, calculates cancellation fees and service credits in code rather than in the model, and requires explicit confirmation before anything is changed.',
+    architecture: {
+      overview:
+        'A workspace-scoped agent that combines cited document retrieval with request-time record lookups, keeps monetary calculations in deterministic code, and gates every state change behind user confirmation.',
+      stages: [
+        {
+          title: '01. Workspace-Scoped Context',
+          description: 'Each session runs as a chosen actor against the accounts attached to the workspace on the server, so lookups only reach records that are in scope.',
+          tech: 'Workspace scoping / ASTRION API',
+        },
+        {
+          title: '02. Cited Policy Retrieval',
+          description: 'Answers are drawn from policies, SOPs, product documentation and signed customer agreements, with every source shown alongside the response.',
+          tech: 'RAG / Source citations',
+        },
+        {
+          title: '03. Request-Time Record Lookup',
+          description: 'The agent queries orders, tickets and accounts when a question is asked rather than relying on pre-loaded answers.',
+          tech: 'Agentic tool use',
+        },
+        {
+          title: '04. Deterministic Calculation & Confirmed Actions',
+          description: 'Cancellation fees and service credits are computed in code, and no change is made without explicit user confirmation.',
+          tech: 'Code-computed / Human-in-the-loop',
+        },
+      ],
+    },
+    implementation: [
+      'Grounded responses in policies, SOPs, product documentation and signed customer agreements, showing the source behind every answer.',
+      'Resolved orders, tickets and accounts at request time through tool lookups against the ASTRION API instead of answering from static text.',
+      'Moved cancellation-fee and service-credit arithmetic out of the model and into code so the figures are calculated, not generated.',
+      'Required explicit confirmation before any record is changed, keeping the operator in control of state changes.',
+    ],
+    challenges: [],
+    tradeoffs: [
+      {
+        decision: 'Calculate cancellation fees and service credits in code instead of asking the model to write them.',
+        justification: 'Monetary outcomes stay deterministic and reproducible, and the model is limited to explaining the result with cited sources.',
+        alternative: 'Letting the language model compute and state the figures directly from retrieved policy text.',
+      },
+    ],
+    evaluation: {
+      methodology: 'Exercised through scenario prompts covering fee-free order cancellation, failed-pickup service-credit eligibility, carrier-fault late pickups, stale booking status after collection, and ticket investigation with escalation.',
+      metricsSummary: 'No quantitative benchmark is published for this project; the live demo is the reference.',
+      keyObservation: 'Separating retrieval, record lookup, calculation and confirmed action keeps each answer traceable to a source or a computed value.',
+    },
+    evidence: [
+      {
+        type: 'architecture',
+        title: 'Grounded Support Agent Flow',
+        description: 'Workspace scoping, cited document retrieval, request-time record lookup, code-computed fees and confirmation-gated changes.',
+      },
+    ],
+    demo: 'https://astrion-app.vercel.app/',
+  },
+  {
     slug: 'maritime-video-restoration',
     title: 'Maritime Low-Visibility Video Restoration Pipeline',
     shortDescription:

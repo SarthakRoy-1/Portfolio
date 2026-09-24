@@ -67,8 +67,8 @@ export function ContactSection() {
   };
 
   return (
-    <section id="contact" className="py-20 border-t border-border">
-      <div className="max-w-site-desktop mx-auto px-5 md:px-8">
+    <section className="py-20 border-t border-border">
+      <div id="contact" className="scroll-mt-[var(--anchor-offset)] max-w-site-desktop mx-auto px-5 md:px-8">
         <SectionHeading
           kicker="06 / INQUIRIES & COLLABORATION"
           title="Let's Build Something"

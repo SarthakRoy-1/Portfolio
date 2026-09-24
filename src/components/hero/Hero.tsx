@@ -106,12 +106,11 @@ export function Hero() {
 
           {/* Visual Architecture Side (5 columns) */}
           <div
-            /* The grid is top-aligned (lg:items-start), so the portrait is
-               pushed down by exactly the height of the "AI / ML ENGINEERING"
-               eyebrow row above the heading - avatar h-8 (2rem) + mb-6
-               (1.5rem) = 3.5rem = mt-14. That puts the portrait's top edge on
-               the same line as the top of "I BUILD". */
-            className="lg:col-span-5 flex flex-col w-full mt-12 lg:mt-14"
+            /* The grid is top-aligned (lg:items-start) with no offset, so the
+               portrait's top edge sits on the same line as the "AI / ML
+               ENGINEERING" eyebrow row - the hero's visual starting point -
+               instead of being pushed down to the top of "I BUILD". */
+            className="lg:col-span-5 flex flex-col w-full mt-12 lg:mt-0"
           >
             <div className="hero-reveal w-full max-w-[400px] mx-auto lg:max-w-none" style={{ animationDelay: '600ms' }}>
               <InteractiveFace />

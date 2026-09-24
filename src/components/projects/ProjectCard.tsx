@@ -110,6 +110,18 @@ export function ProjectCard({ project, index }: ProjectCardProps) {
               <Github className="w-4 h-4" />
             </a>
           )}
+          {project.demo && (
+            <a
+              href={project.demo}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Open live demo of ${project.title}`}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-surface text-xs font-mono font-medium text-muted hover:text-foreground hover:border-primary/40 transition-colors"
+            >
+              <span>LIVE DEMO</span>
+              <ArrowUpRight className="w-3.5 h-3.5 text-primary" />
+            </a>
+          )}
           <Link
             href={`/projects/${project.slug}`}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-surface-elevated border border-border group-hover:bg-primary group-hover:border-primary group-hover:text-background text-xs font-mono font-medium text-foreground transition-all duration-300 interactive"

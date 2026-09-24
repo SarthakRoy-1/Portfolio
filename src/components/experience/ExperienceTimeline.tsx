@@ -22,8 +22,8 @@ export function ExperienceTimeline() {
   });
 
   return (
-    <section id="experience" className="py-24 border-t border-border">
-      <div className="max-w-site-desktop mx-auto px-5 md:px-8">
+    <section className="py-24 border-t border-border">
+      <div id="experience" className="scroll-mt-[var(--anchor-offset)] max-w-site-desktop mx-auto px-5 md:px-8">
         <ScrollReveal>
           <SectionHeading
             kicker="03 / CAREER & TRACK RECORD"

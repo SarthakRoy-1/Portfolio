@@ -8,8 +8,8 @@ import { MagneticButton } from '../interaction/MagneticButton';
 
 export function AboutSection() {
   return (
-    <section id="about" className="py-20 border-t border-border">
-      <div className="max-w-site-desktop mx-auto px-5 md:px-8">
+    <section className="py-20 border-t border-border">
+      <div id="about" className="scroll-mt-[var(--anchor-offset)] max-w-site-desktop mx-auto px-5 md:px-8">
         <ScrollReveal>
           <SectionHeading
             kicker="05 / ENGINEERING PHILOSOPHY"

@@ -5,8 +5,8 @@ import { ScrollReveal } from '../interaction/ScrollReveal';
 
 export function SkillsMatrix() {
   return (
-    <section id="skills" className="py-24 border-t border-border">
-      <div className="max-w-site-desktop mx-auto px-5 md:px-8">
+    <section className="py-24 border-t border-border">
+      <div id="skills" className="scroll-mt-[var(--anchor-offset)] max-w-site-desktop mx-auto px-5 md:px-8">
         <ScrollReveal>
           <SectionHeading
             kicker="04 / TECHNICAL CAPABILITIES"
@@ -16,7 +16,18 @@ export function SkillsMatrix() {
         </ScrollReveal>
 
         <ScrollReveal delay={0.1}>
-          <div className="w-full overflow-x-auto pb-4">
+          {/* Phones: the same rows as a stacked list, so nothing scrolls sideways. */}
+          <ul className="md:hidden divide-y divide-border/50 border-y border-border/80">
+            {capabilitiesData.map((cap) => (
+              <li key={cap.category} className="py-4 space-y-1">
+                <div className="font-semibold text-foreground text-sm">{cap.category}</div>
+                <div className="font-mono text-xs text-primary/90 font-medium leading-relaxed">{cap.technology}</div>
+                <div className="text-sm text-muted">{cap.application}</div>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden md:block w-full overflow-x-auto pb-4">
             <table className="w-full text-left border-collapse min-w-[600px]">
               <thead>
                 <tr className="border-b border-border/80">
