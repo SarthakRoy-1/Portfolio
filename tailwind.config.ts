@@ -58,6 +58,13 @@ const config: Config = {
       },
       animation: {
         'pulse-subtle': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'status-blink': 'status-blink 1.8s ease-in-out infinite',
+      },
+      keyframes: {
+        'status-blink': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.35' },
+        },
       },
     },
   },

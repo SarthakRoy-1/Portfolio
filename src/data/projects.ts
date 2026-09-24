@@ -21,12 +21,14 @@ export interface ProjectEvidence {
   description: string;
 }
 
+export type ProjectStatus = 'production' | 'completed' | 'ongoing';
+
 export interface Project {
   slug: string;
   title: string;
   shortDescription: string;
   category: 'Computer Vision' | 'Generative AI' | 'Robotics / Sensors' | 'Full-Stack AI';
-  status: 'production' | 'completed' | 'experimental';
+  status: ProjectStatus;
   featured: boolean;
   priority: number;
   technologies: string[];
@@ -373,7 +375,7 @@ export const projectsData: Project[] = [
     shortDescription:
       'Source-grounded support agent for logistics operations that answers order, ticket and policy questions from SOPs and signed customer agreements, computes fees and credits in code, and changes nothing without confirmation.',
     category: 'Generative AI',
-    status: 'completed',
+    status: 'ongoing',
     featured: true,
     priority: 7,
     technologies: ['RAG', 'Agentic Tool Use', 'Source Citations', 'Human-in-the-Loop', 'Next.js', 'Vercel'],

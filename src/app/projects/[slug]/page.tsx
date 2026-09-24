@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { projectsData } from '@/data/projects';
 import { ArchitectureDiagram } from '@/components/projects/ArchitectureDiagram';
 import { Badge } from '@/components/ui/Badge';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import {
   ArrowLeft,
@@ -79,10 +80,7 @@ export default function ProjectCaseStudyPage({
             <Badge variant="primary" className="text-xs">
               {project.category}
             </Badge>
-            <Badge variant="status" className="capitalize text-xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />
-              {project.status}
-            </Badge>
+            <StatusBadge status={project.status} className="text-xs" />
           </div>
 
           <h1 className="text-hero font-extrabold text-foreground tracking-tight max-w-4xl mb-6">

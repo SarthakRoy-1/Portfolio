@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Project } from '@/data/projects';
 import { Badge } from '../ui/Badge';
+import { StatusBadge } from '../ui/StatusBadge';
 import { ArrowRight, Github, Layers, ArrowUpRight, Cpu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -28,10 +29,7 @@ export function ProjectCard({ project, index }: ProjectCardProps) {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="status" className="capitalize text-[11px]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1" />
-            {project.status}
-          </Badge>
+          <StatusBadge status={project.status} className="text-[11px]" />
         </div>
       </div>
 
