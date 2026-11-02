@@ -15,6 +15,7 @@ export const navLinks = [
   { name: 'EXPERIENCE', href: '/#experience' },
   { name: 'STACK', href: '/#skills' },
   { name: 'RESEARCH', href: '/#research' },
+  { name: 'HACKATHONS', href: '/#hackathons' },
   { name: 'ABOUT', href: '/#about' },
   { name: 'CONTACT', href: '/#contact' },
 ];

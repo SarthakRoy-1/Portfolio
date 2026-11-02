@@ -70,7 +70,7 @@ export function ContactSection() {
     <section className="py-20 border-t border-border">
       <div id="contact" className="scroll-mt-[var(--anchor-offset)] max-w-site-desktop mx-auto px-5 md:px-8">
         <SectionHeading
-          kicker="06 / INQUIRIES & COLLABORATION"
+          kicker="08 / INQUIRIES & COLLABORATION"
           title="Let's Build Something"
           description="Interested in AI/ML engineering, perception pipeline development, or technical collaboration? Reach out directly."
         />

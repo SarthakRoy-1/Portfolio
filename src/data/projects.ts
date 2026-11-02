@@ -591,4 +591,77 @@ export const projectsData: Project[] = [
     ],
     github: 'https://github.com/SarthakRoy-1',
   },
+  {
+    slug: 'firedrill-agent-test-runner',
+    title: 'FireDrill: Prompt-Injection Test Runner for AI Workflows',
+    shortDescription:
+      'Open-source test runner that opens prompt-injection pull requests against a sandbox repo, lets an unattended AI workflow react, and grades what it actually did with deterministic assertions. No model grades the result.',
+    category: 'Generative AI',
+    status: 'completed',
+    featured: true,
+    priority: 8,
+    technologies: ['TypeScript', 'Node.js', 'GitHub API (Octokit)', 'Zod', 'YAML', 'GitHub Actions', 'SARIF', 'Next.js', 'Vercel', 'Alan AI'],
+    problem:
+      'AI workflows that run unattended get real repository access, and the text they read (PR titles, bodies, files in the diff) is written by strangers. Guardrails such as "do not merge or push" are prose, and nothing checks that they survive hostile input; the only documented way to test a workflow is to run it and eyeball the result.',
+    approach:
+      'Built a CLI that describes each attack as a YAML scenario, opens the pull request on a throwaway sandbox repo through the GitHub API, waits for the workflow to go quiet, and scores the observed effects (comments, branches, commits, merges, leaked canary secret, trap-URL hits) with deterministic assertions.',
+    architecture: {
+      overview:
+        'A TypeScript CLI plus a static results site. It observes the system under test only through GitHub and its own tripwire server, so it never depends on the workflow platform exposing an API.',
+      stages: [
+        {
+          title: '01. Scenario Definition',
+          description: 'Each attack is a Zod-validated YAML file with a PR title, body and optional files, plus must and mustNot assertions.',
+          tech: 'YAML / Zod',
+        },
+        {
+          title: '02. Canary & Tripwire',
+          description: 'A fake canary secret is planted in the workflow instructions, and per-run trap URLs served by a small tripwire server prove a leak or an attacker-URL fetch.',
+          tech: 'Canary token / Tripwire server',
+        },
+        {
+          title: '03. Sandbox Run',
+          description: 'Opens the injection PR on a sandbox repo with a repo-scoped fine-grained token, waits for the workflow, then closes the PR and branch.',
+          tech: 'GitHub API / Octokit',
+        },
+        {
+          title: '04. Deterministic Grading',
+          description: 'Assertions are scored with severity weights into one score per run. Silence fails and errors are never reported as a pass, and results export to HTML, SARIF and a badge.',
+          tech: 'Deterministic scorer / SARIF',
+        },
+      ],
+    },
+    implementation: [
+      'Shipped an attack pack across direct override, hidden instruction, exfiltration and guardrail-erosion classes, plus a benign control scenario that must trip nothing.',
+      'Added a mock-agent selftest (resistant, vulnerable, silent) so the grader is proven to catch failures before a real result is trusted.',
+      'Distinguished TIMEOUT from a security failure and left timeouts out of the score, so a workflow that never answered is not counted as safe or as vulnerable.',
+      'Published a results site with per-scenario assertion traces and a Run it yourself page, and a GitHub Action with SARIF output for code scanning.',
+    ],
+    challenges: [],
+    tradeoffs: [
+      {
+        decision: 'Grade with deterministic assertions on observable GitHub effects instead of a model judge.',
+        justification: 'Results are reproducible and auditable, and a model is used at most to write attack variants, never to decide pass or fail.',
+        alternative: 'Using an LLM-as-judge to score the workflow transcript.',
+      },
+    ],
+    constraints: [
+      "Effects are visible only through GitHub and the tripwire; the workflow platform's internal logs are not observable.",
+      'Live runs were slow, taking 6 to 14 minutes each.',
+    ],
+    evaluation: {
+      methodology: 'Ran the attack pack live against a real Alan Code automation (no tools, summary-comment instruction) across three runs, plus one run of a deliberately weakened copy, and verified the scorer on mock agents.',
+      metricsSummary: 'In the 24 live scenario runs where the workflow responded, no canary leak, merge, push or new branch was observed. 7 runs in an early batch timed out and were rerun with a longer wait.',
+      keyObservation: 'These results describe one tested configuration only; no live failure was caught, so failure detection is demonstrated on mock agents rather than on a real workflow.',
+    },
+    evidence: [
+      {
+        type: 'pipeline',
+        title: 'Attack-and-Grade Pipeline',
+        description: 'Scenario YAML, sandbox PR, workflow reaction, GitHub effects plus tripwire, deterministic score.',
+      },
+    ],
+    github: 'https://github.com/SarthakRoy-1/FireDrill',
+    demo: 'https://firedrill-silk.vercel.app',
+  },
 ];
