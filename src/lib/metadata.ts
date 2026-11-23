@@ -6,7 +6,7 @@ export const siteConfig = {
   title: 'Sarthak Roy — AI / ML Engineer | Computer Vision, GenAI & Robotics',
   description:
     'Production portfolio of Sarthak Roy — AI / ML Engineer specializing in Computer Vision, Generative AI, Deep Learning, Robotics Sensor Fusion, and Machine Learning Systems.',
-  url: 'https://sarthakroy40.dev',
+  url: 'https://sarthakroypf.netlify.app',
   author: 'Sarthak Roy',
   links: {
     github: 'https://github.com/SarthakRoy-1',
