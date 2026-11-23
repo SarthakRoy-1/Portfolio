@@ -40,7 +40,7 @@ export default function RootLayout({
     '@type': 'Person',
     name: 'Sarthak Roy',
     jobTitle: 'AI / ML Engineer',
-    url: 'https://sarthakroy40.dev',
+    url: 'https://sarthakroypf.netlify.app',
     sameAs: [
       'https://github.com/SarthakRoy-1',
       'https://www.linkedin.com/in/sarthakroy40',

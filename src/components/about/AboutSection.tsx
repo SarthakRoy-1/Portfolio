@@ -12,7 +12,7 @@ export function AboutSection() {
       <div id="about" className="scroll-mt-[var(--anchor-offset)] max-w-site-desktop mx-auto px-5 md:px-8">
         <ScrollReveal>
           <SectionHeading
-            kicker="05 / ENGINEERING PHILOSOPHY"
+            kicker="07 / ENGINEERING PHILOSOPHY"
             title="About & Technical Focus"
             description="A technical overview of my background in production computer vision, generative AI pipelines, defense surveillance systems, and systems engineering."
           />
