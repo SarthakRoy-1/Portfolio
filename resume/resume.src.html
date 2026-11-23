@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Sarthak Roy - Resume</title>
+<style>
+@page{size:Letter;margin:0.3in 0.45in}
+*{box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;font-size:8.2pt;line-height:1.22;color:#000;margin:0}
+h1{font-size:17pt;text-align:center;margin:0 0 2px}
+.c{text-align:center;font-size:8.4pt}
+h2{font-size:10pt;margin:5px 0 2px;border-bottom:1px solid #000;padding-bottom:1px;letter-spacing:.3px}
+p{margin:0 0 2px}
+.h{font-weight:bold;margin-top:3px}
+.m{font-style:italic;font-weight:normal}
+ul{margin:1px 0 2px;padding-left:12px}
+li{margin:0 0 1.2px}
+a{color:#000;text-decoration:none}
+</style></head><body>
+<h1>Sarthak Roy</h1>
+<div class="c">Bangalore, Karnataka 562163 | __SARTHAK_PHONE__ | __SARTHAK_EMAIL__</div>
+<div class="c">linkedin.com/in/sarthakroy40 | github.com/SarthakRoy-1 | sarthakroypf.netlify.app</div>
+
+<h2>SUMMARY</h2>
+<p>AI/ML engineer specializing in production computer vision and document intelligence - real-time detection and tracking, feature matching, sensor fusion, and geometry-driven OCR reconstruction - building end-to-end Python systems from model inference through FastAPI deployment, with applied RAG, LLM and AI-agent testing experience. Winner, OpenFire hackathon (Alan AI).</p>
+
+<h2>EXPERIENCE</h2>
+<p class="h">AI Engineer Trainee - Tardid Technologies Pvt. Ltd.</p>
+<p><b>Bangalore | Feb 2026 - Aug 2026</b></p>
+<p class="m">Brainbox AI product suite - ML/CV modules across autonomous surveillance vessel, AI perimeter security, and networked warfare management platforms.</p>
+<ul>
+<li><b>Document intelligence (OCR):</b> Engineered a geometry-first OCR reconstruction pipeline (PaddleOCR/PP-OCR) that converts fragmented text detections into structured multi-column ledger data using bounding-box geometry, spatial row clustering, column-interval assignment, and multi-line header detection.</li>
+<li><b>OCR data quality:</b> Implemented character-confusion handling, confidence-aware filtering, and cell-level numeric/text normalization for noisy scans; extended the pipeline to multi-page documents with structured Excel output, validated by synthetic multi-page test suites.</li>
+<li><b>Real-time detection &amp; tracking (Vessel Tracker):</b> Built vessel detection and tracking (YOLO + OC-SORT) with motion-gating and per-track centroid history to suppress false positives on continuously running RTSP video pipelines.</li>
+<li><b>Feature matching &amp; deployment:</b> Architected a vessel identification pipeline using LoFTR correspondences and DINOv2 descriptors with quality-adaptive thresholds and RANSAC geometric filtering, shipped as a FastAPI service with an operator review frontend.</li>
+<li><b>Classical CV &amp; sensor fusion:</b> Designed a dual-EMA background-subtraction intrusion/unattended-object detector with global lighting-change suppression to cut false alerts on live CCTV; fused PTZ camera and LiDAR data in ROS2, resolving range/bearing accuracy issues in multi-domain tracking.</li>
+</ul>
+<p class="h">Computer Vision Intern - Tardid Technologies Pvt. Ltd.</p>
+<p><b>Bangalore | Aug 2023 - Oct 2023</b></p>
+<ul><li><b>Maritime detection under degraded conditions (Fog Fixer):</b> Engineered CNN-based ship detection and classification with image/video enhancement pipelines to sustain accuracy under fog and occlusion; investigated SPAD and acousto-optic deflection for precision imaging, and integrated perception models with naval hardware and data pipelines.</li></ul>
+
+<h2>PROJECTS</h2>
+<p class="h">FireDrill - Prompt-Injection Test Runner for AI Workflows <span class="m">(TypeScript, Node.js, Octokit, Zod, GitHub Actions, SARIF, Next.js)</span></p>
+<ul>
+<li>Built an open-source CLI that opens prompt-injection pull requests on a sandbox repo, lets an unattended AI workflow react, and grades what it did with deterministic assertions (comments, branches, merges, canary leak, trap-URL hits) - no model judges the result. Live: firedrill-silk.vercel.app</li>
+<li>Shipped an attack pack, a mock-agent selftest to prove the grader catches failures, TIMEOUT handling kept out of the score, and a results site plus GitHub Action with SARIF output. Ran live against a real Alan Code automation: no canary leak, merge, push or new branch in 24 responding runs.</li>
+</ul>
+<p class="h">ASTRION - AI Logistics Support Agent <span class="m">(RAG, agentic tool use, Next.js, Vercel)</span></p>
+<ul><li>Built a source-grounded support agent that cites policies, SOPs and signed customer agreements, looks up orders and tickets at request time, computes cancellation fees and service credits in code, and changes nothing without user confirmation. Live: astrion-app.vercel.app</li></ul>
+<p class="h">ParcelPilot - AI Support Operations Platform <span class="m">(REST APIs, OpenAPI, Automated Testing)</span></p>
+<ul><li>Engineered a document-grounded AI support platform end to end: indexed operational documentation for retrieval and implemented a deterministic provider mode so AI responses stay reproducible and testable rather than free-running LLM output.</li>
+<li>Architected the backend around a validated OpenAPI contract with a full automated test suite (564 backend, 81 frontend tests passing), and deployed the integrated frontend and API as a working system.</li></ul>
+<p class="h">MedBot - Medical Knowledge Assistant (RAG) <span class="m">(Python, LangChain, Pinecone, FastAPI, OpenRouter)</span></p>
+<ul><li>Built an end-to-end retrieval-augmented generation pipeline: chunked and embedded medical PDFs into a Pinecone vector index, orchestrated context retrieval with LangChain, and served grounded LLM responses through Flask/FastAPI endpoints.</li></ul>
+<p class="h">SubSpace - AI Chat &amp; Authentication Platform <span class="m">(React.js, Supabase/Nhost, n8n, OpenRouter)</span></p>
+<ul><li>Developed a full-stack chat platform with session-validated authentication, an OpenRouter-backed AI chat service, and n8n-driven real-time backend workflows; reduced onboarding time by 60%.</li></ul>
+
+<h2>HACKATHONS &amp; AWARDS</h2>
+<p><b>Winner - OpenFire, Alan AI</b> (Oct 2026, solo, virtual): built and submitted FireDrill in about 31 hours - public repo, deployed results site and demo video.</p>
+
+<h2>TECHNICAL SKILLS</h2>
+<p><b>Languages:</b> Python, TypeScript, JavaScript, SQL</p>
+<p><b>Computer Vision:</b> OpenCV, YOLO, OC-SORT, DINOv2, LoFTR, PaddleOCR/PP-OCR, Object Detection &amp; Multi-Object Tracking, Feature Matching, RANSAC, Image &amp; Document Processing, Table/Text Reconstruction, RTSP Pipelines, LiDAR-Camera Fusion, ROS2</p>
+<p><b>AI / ML:</b> Deep Learning, Convolutional Neural Networks (CNNs), Model Inference Pipelines, Retrieval-Augmented Generation (RAG), AI Agent Testing, LangChain, Vector Embeddings, Vector Search, Hugging Face, OpenRouter</p>
+<p><b>Backend &amp; APIs:</b> FastAPI, Flask, REST API Design, OpenAPI, WebSockets, Node.js, Express.js, n8n, GitHub API, GitHub Actions</p>
+<p><b>Data &amp; Platforms:</b> PostgreSQL, MongoDB, Pinecone, Supabase, AWS, Git, React.js, Next.js, Vercel</p>
+
+<h2>EDUCATION</h2>
+<p><b>B.Tech, Computer Science Engineering</b><br><b>Vellore Institute of Technology, Vellore | 2021 - 2025</b></p>
+</body></html>
